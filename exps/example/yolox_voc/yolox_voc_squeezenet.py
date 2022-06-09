@@ -41,7 +41,7 @@ class Exp(MyExp):
         if "model" not in self.__dict__:
             from yolox.models import YOLOX, SQPAFPN, YOLOXHead
             backbone = SQPAFPN()
-            head = YOLOXHead(self.num_classes, 1, in_channels=[128, 256], act="relu")
+            head = YOLOXHead(self.num_classes, 1, in_channels=[32, 128, 256], act="relu") # 147 47
             self.model = YOLOX(backbone, head)
         self.model.apply(init_yolo)
         self.model.head.initialize_biases(1e-2)
