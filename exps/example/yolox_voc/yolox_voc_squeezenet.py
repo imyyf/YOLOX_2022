@@ -14,12 +14,12 @@ class Exp(MyExp):
     def __init__(self):
         super(Exp, self).__init__()
         self.num_classes = 1
-        self.input_size = (224, 224)
+        self.input_size = (416, 416)
         self.random_size = (10, 20)
-        self.test_size = (224, 224)
-        self.depth = 0.33
-        self.width = 0.50
-        self.warmup_epochs = 1
+        self.test_size = (416, 416)
+
+
+        self.warmup_epochs = 10
 
 
         # ---------- transform config ------------ #
@@ -41,7 +41,7 @@ class Exp(MyExp):
         if "model" not in self.__dict__:
             from yolox.models import YOLOX, SQPAFPN, YOLOXHead
             backbone = SQPAFPN()
-            head = YOLOXHead(self.num_classes, 1, in_channels=[32, 128, 256], act="relu") # 147 47
+            head = YOLOXHead(self.num_classes, 1, in_channels=[128, 256, 512], act="relu") # 147 47
             self.model = YOLOX(backbone, head)
         self.model.apply(init_yolo)
         self.model.head.initialize_biases(1e-2)

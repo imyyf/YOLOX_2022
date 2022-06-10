@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 from .squeezenet import SqueezeNet_cw_net
-from .network_blocks import BaseConv, CSPLayer, DWConv
+from .network_blocks import BaseConv, CSPLayer, DWConv, Focus, SPPBottleneck
 
 
 class SQPAFPN(nn.Module):
@@ -16,56 +16,52 @@ class SQPAFPN(nn.Module):
 
     def __init__(
         self,
+        width = 0.5,
+        depth = 0.33,
         # in_features=("dark3", "dark4", "dark5"),
-        # in_channels=[256, 512, 1024],
+        in_channels=[256, 512, 1024],
         depthwise=False,
         act="relu",
     ):
         super().__init__()
-        self.backbone = SqueezeNet_cw_net(used_layers=[1,4,7]) # 147 47
+        self.stem = Focus(3, 16, ksize=3, act=act)
+        self.backbone = SqueezeNet_cw_net(used_layers=[3,6]) # 147 47
+        self.dark5 = nn.Sequential(
+            Conv(256, 512, 3, 2, act=act),
+            SPPBottleneck(512, 512, activation=act),
+            CSPLayer(
+                512,
+                512,
+                n=1,
+                shortcut=False,
+                depthwise=depthwise,
+                act=act,
+            ),
+        )
         # self.in_features = in_features
         # self.in_channels = in_channels
         Conv = DWConv if depthwise else BaseConv
 
         self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
         self.lateral_conv0 = BaseConv(
-            256, 128, 1, 1, act=act
+            int(in_channels[2] * width), int(in_channels[1] * width), 1, 1, act=act
         )
-
-        # self.pan1 = CSPLayer(
-        #     256,
-        #     128,
-        #     1,
-        #     False,
-        #     depthwise=depthwise,
-        #     act=act,
-        # )
-
-        # self.pan0 = CSPLayer(
-        #     256,
-        #     256,
-        #     1,
-        #     False,
-        #     depthwise=depthwise,
-        #     act=act,
-        # )
-
         self.C3_p4 = CSPLayer(
-            256,
-            128,
-            1,
+            int(2 * in_channels[1] * width),
+            int(in_channels[1] * width),
+            round(3 * depth),
             False,
             depthwise=depthwise,
             act=act,
         )  # cat
 
         self.reduce_conv1 = BaseConv(
-            128, 32, 1, 1, act=act
+            int(in_channels[1] * width), int(in_channels[0] * width), 1, 1, act=act
         )
         self.C3_p3 = CSPLayer(
-            64,
-            32,
-            1,
+            int(2 * in_channels[0] * width),
+            int(in_channels[0] * width),
+            round(3 * depth),
             False,
             depthwise=depthwise,
             act=act,
@@ -73,12 +69,12 @@ class SQPAFPN(nn.Module):
 
         # bottom-up conv
         self.bu_conv2 = Conv(
-            32, 64, 3, 2, act=act
+            int(in_channels[0] * width), int(in_channels[0] * width), 3, 2, act=act
         )
         self.C3_n3 = CSPLayer(
-            128,
-            128,
-            1,
+            int(2 * in_channels[0] * width),
+            int(in_channels[1] * width),
+            round(3 * depth),
             False,
             depthwise=depthwise,
             act=act,
@@ -86,12 +82,12 @@ class SQPAFPN(nn.Module):
 
         # bottom-up conv
         self.bu_conv1 = Conv(
-            128, 128, 3, 2, act=act
+            int(in_channels[1] * width), int(in_channels[1] * width), 3, 2, act=act
         )
         self.C3_n4 = CSPLayer(
-            256,
-            256,
-            1,
+            int(2 * in_channels[1] * width),
+            int(in_channels[2] * width),
+            round(3 * depth),
             False,
             depthwise=depthwise,
             act=act,
@@ -107,18 +103,17 @@ class SQPAFPN(nn.Module):
         """
 
         #  backbone
-        features = self.backbone(input)
+        inputf = self.stem(input)
+        features = self.backbone(inputf)
         
-        [x2, x1, x0] = features # 4,7
+        [x2, x1] = features # 4,7
 
-        # fpn_out0 = self.lateral_conv0(x0)
-        # f_out0 = self.upsample(fpn_out0)
-        # f_out0 = torch.cat([f_out0, x1], 1)
-        # pan_out1 = self.pan1(f_out0)
+        x0 = self.dark5(x1)
 
-        # p_out0 = self.bu_conv1(pan_out1)
-        # p_out0 = torch.cat([p_out0, fpn_out0], 1)
-        # pan_out0 = self.pan0(p_out0)
+        #  backbone
+        out_features = self.backbone(input)
+        features = [out_features[f] for f in self.in_features]
+        [x2, x1, x0] = features
 
         fpn_out0 = self.lateral_conv0(x0)  # 1024->512/32
         f_out0 = self.upsample(fpn_out0)  # 512/16
