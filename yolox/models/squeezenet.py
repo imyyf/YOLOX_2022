@@ -84,8 +84,8 @@ class SqueezeNet_cw_net(nn.Module):
 		super(SqueezeNet_cw_net, self).__init__()
 		self.used_layers = used_layers
 		self.feature = nn.Sequential(
-			convlayer(in_channels=3, out_channels=16, kernel_size=3, padding=1, stride=2),
-			convlayer(in_channels=16, out_channels=32, kernel_size=3, padding=1, stride=1),
+			# convlayer(in_channels=3, out_channels=16, kernel_size=3, padding=1, stride=2),
+			convlayer(in_channels=16, out_channels=32, kernel_size=3, padding=1, stride=2),
 			nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True),
 			Fire3(32, 16, 64, 64),
 			Fire3(128, 16, 64, 64),
